@@ -1,5 +1,5 @@
 // Arduino Code (arduino_motor_controls.ino)
-
+// arduino-cli compile --upload --fqbn arduino:avr:uno -p /dev/ttyACM0 .
 #include <AccelStepper.h>
 
 // Define motor pins
@@ -23,10 +23,69 @@ char command;
 int value;
 bool running = false;
 bool dirInverted = false; // Tracks the current direction state
+bool homing = false;
 
-// Timing variables for non-blocking probe check
-unsigned long lastProbeCheck = 0;
-const unsigned long probeInterval = 10; // 10 milliseconds
+// --- Pin Locator Variables ---
+// These are used by the new, blocking locate function
+int pin_count = 0;
+bool location_flag = false;
+int tracked_revs = 0;
+bool lastProbeState = false;
+
+// Function to manually step the motor once
+void take_one_step(bool direction) {
+  // Set the direction pin
+  digitalWrite(DIR_PIN, direction);
+
+  // Send a pulse to the step pin
+  digitalWrite(STEP_PIN, HIGH);
+  delayMicroseconds(2000); // Wait for a short duration
+  digitalWrite(STEP_PIN, LOW);
+  delayMicroseconds(2000); // Wait again before the next step
+}
+
+// The core blocking homing function
+void locate() {
+  Serial.println("Starting homing procedure...");
+  homing = true;
+  long steps_taken = 0;
+  bool flag = false;
+
+  // Set the motor to move in the homing direction
+  digitalWrite(DIR_PIN, false);
+  
+  // Loop until the sensor is found and cleared
+  while (true) {
+    take_one_step(false); // Move in one direction
+
+    // The logic to find and count steps over the mark
+    if (digitalRead(PROBE_PIN) == HIGH) {
+      steps_taken++;
+      flag = true;
+    } else if (digitalRead(PROBE_PIN) == LOW && flag) {
+      // The mark has been passed, so back up halfway and exit
+      Serial.print("Limit switch hit and passed. Steps taken: ");
+      Serial.println(steps_taken);
+
+      // Go back by half the steps
+      long steps_to_go_back = steps_taken / 2;
+      
+      // Move in the opposite direction for the calculated number of steps
+      for (long i = 0; i < steps_to_go_back; i++) {
+        take_one_step(true); // Move in the opposite direction
+      }
+
+      // We have now found the home position, exit the function.
+      break; 
+    }
+  }
+  
+  // Set a new origin after homing
+  stepper.setCurrentPosition(0);
+  Serial.println("Homing complete. New origin set.");
+  
+  homing = false;
+}
 
 void setup() {
   Serial.begin(115200);
@@ -38,42 +97,34 @@ void setup() {
 }
 
 void loop() {
-  // Check for incoming serial data (non-blocking)
-  if (Serial.available() > 0) {
-    command = Serial.read();
+  // Only process serial commands if not in the middle of a homing sequence
+  if (!homing) {
+    if (Serial.available() > 0) {
+      command = Serial.read();
 
-    if (command == 'S') { // Set Speed command
-      while (Serial.available() == 0) {
-        // Wait for value to be sent
+      if (command == 'S') { // Set Speed command
+        while (Serial.available() == 0) {} // Wait for value
+        value = Serial.parseInt();
+        stepper.setSpeed(value);
+        Serial.print("Speed set: ");
+        Serial.println(value);
+        running = true;
+      } else if (command == 'T') { // Toggle Direction command
+        dirInverted = !dirInverted; // Flip the state
+        stepper.setPinsInverted(dirInverted, false, false);
+        Serial.println("Direction toggled.");
+      } else if (command == 'X') { // Stop Motor command
+        stepper.stop();
+        running = false;
+        Serial.println("Motor stopped.");
+      } else if (command == 'L') { // New: Locate/Homing command
+        locate();
       }
-      value = Serial.parseInt();
-      stepper.setSpeed(value);
-      Serial.print("Speed set: ");
-      Serial.println(value);
-      running = true;
-    } else if (command == 'T') { // Toggle Direction command
-      dirInverted = !dirInverted; // Flip the state
-      stepper.setPinsInverted(dirInverted, false, false);
-      Serial.println("Direction toggled.");
-    } else if (command == 'X') { // Stop Motor command
-      stepper.stop();
-      running = false;
-      Serial.println("Motor stopped.");
     }
   }
 
-  // Run the motor if a speed is set (non-blocking)
-  if (running) {
+  // Run the motor if a speed is set (non-blocking) and not homing
+  if (running && !homing) {
     stepper.runSpeed();
-  }
-
-  // Check the probe pin every 10ms (non-blocking timer)
-  if (millis() - lastProbeCheck >= probeInterval) {
-    lastProbeCheck = millis();
-    
-    // Check if the pin is pulled LOW
-    if (digitalRead(PROBE_PIN) == HIGH) {
-      Serial.println("PROBE_HIGH");
-    }
   }
 }

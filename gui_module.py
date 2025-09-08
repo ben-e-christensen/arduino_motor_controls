@@ -4,8 +4,10 @@ import time
 import threading
 
 # Import your modules
-from helpers import calc_spin, update_tkinter_input_box
+from helpers import update_tkinter_input_box
 from states import motor_state
+
+global degrees 
 
 # --- Serial Connection Setup ---
 try:
@@ -39,6 +41,10 @@ def serial_listener_thread():
                     print(f"Received from Arduino: {line}")
                     if line == "PROBE_LOW":
                         print("Probe activated!")
+                    elif line == "s":
+                        global degrees 
+                        degrees += 360 / motor_state['spr']
+                        print(degrees)
             except serial.SerialException as e:
                 print(f"Serial error: {e}")
                 break
@@ -114,6 +120,11 @@ def reverse_direction():
     """Sends a toggle direction command to the Arduino."""
     send_command('T')
 
+def find_origin():
+    """Command to go directly below a sensor"""
+    print('running find origin')
+    send_command('L')
+
 def handle_enter(event=None):
     """Updates the GUI state and sends the speed when 'Enter' is pressed."""
     sps_value = calculate_speed_sps()
@@ -138,6 +149,7 @@ stop_button = tk.Button(root, text="Stop Motor", command=stop_motor)
 reverse_button = tk.Button(root, text="Reverse", command=reverse_direction)
 speed_up_button = tk.Button(root, text="Speed Up", command=lambda: adjust_speed('u'))
 slow_down_button = tk.Button(root, text="Slow Down", command=lambda: adjust_speed('d'))
+homing_button = tk.Button(root, text="Find Origin", command=find_origin)
 inc_label = tk.Label(root, text="Incremental value for speed adjustments (in revs per minute)")
 inc = tk.Spinbox(root, from_=0, to=10, increment=0.25, textvariable=inc_val)
 freq_label = tk.Label(root, text="Enter frequency (in revolutions per minute):")
@@ -153,7 +165,8 @@ update_tkinter_input_box(total_revs, motor_state['revs'])
 update_gui_state()
 
 # Pack widgets
-for w in [start_button, stop_button, reverse_button, speed_up_button, slow_down_button,
+for w in [start_button, stop_button, reverse_button, speed_up_button, 
+          slow_down_button, homing_button,
           inc_label, inc, freq_label, freq, revs_label, total_revs,
           checkbox, input_button, result_label]:
     w.pack(pady=5)
