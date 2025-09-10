@@ -25,7 +25,6 @@ def send_command(command, value=None):
             message = f"{command}{value}\n".encode()
         else:
             message = f"{command}\n".encode()
-        
         ser.write(message)
     else:
         print("Serial port not connected.")

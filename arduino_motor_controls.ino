@@ -51,33 +51,36 @@ void locate() {
   long steps_taken = 0;
   bool flag = false;
 
+
   // Set the motor to move in the homing direction
   digitalWrite(DIR_PIN, false);
   
   // Loop until the sensor is found and cleared
   while (true) {
     take_one_step(false); // Move in one direction
-
+  int raw = analogRead(PROBE_PIN);  // 0–1023 on Uno (10-bit)
+float voltage = raw * (5.0 / 1023.0); // if AREF=5V
+Serial.println(voltage);
     // The logic to find and count steps over the mark
-    if (digitalRead(PROBE_PIN) == HIGH) {
-      steps_taken++;
-      flag = true;
-    } else if (digitalRead(PROBE_PIN) == LOW && flag) {
-      // The mark has been passed, so back up halfway and exit
-      Serial.print("Limit switch hit and passed. Steps taken: ");
-      Serial.println(steps_taken);
+    // if (digitalRead(PROBE_PIN) == HIGH) {
+    //   steps_taken++;
+    //   flag = true;
+    // } else if (digitalRead(PROBE_PIN) == LOW && flag) {
+    //   // The mark has been passed, so back up halfway and exit
+    //   Serial.print("Limit switch hit and passed. Steps taken: ");
+    //   Serial.println(steps_taken);
 
-      // Go back by half the steps
-      long steps_to_go_back = steps_taken / 2;
+    //   // Go back by half the steps
+    //   long steps_to_go_back = steps_taken / 2;
       
-      // Move in the opposite direction for the calculated number of steps
-      for (long i = 0; i < steps_to_go_back; i++) {
-        take_one_step(true); // Move in the opposite direction
-      }
+    //   // Move in the opposite direction for the calculated number of steps
+    //   for (long i = 0; i < steps_to_go_back; i++) {
+    //     take_one_step(true); // Move in the opposite direction
+    //   }
 
-      // We have now found the home position, exit the function.
-      break; 
-    }
+    //   // We have now found the home position, exit the function.
+    //   break; 
+    // }
   }
   
   // Set a new origin after homing
@@ -93,10 +96,14 @@ void setup() {
   stepper.setAcceleration(50000.0);
   
   // Configure the probe pin as an input with a pull-up resistor
-  pinMode(PROBE_PIN, INPUT_PULLUP);
+pinMode(PROBE_PIN, INPUT);  // if PROBE_PIN = A0 etc.
 }
 
 void loop() {
+    int raw = analogRead(PROBE_PIN);  // 0–1023 on Uno (10-bit)
+  float voltage = raw * (5.0 / 1023.0); // if AREF=5V
+  Serial.println(voltage);
+  delay(500);
   // Only process serial commands if not in the middle of a homing sequence
   if (!homing) {
     if (Serial.available() > 0) {
@@ -126,5 +133,6 @@ void loop() {
   // Run the motor if a speed is set (non-blocking) and not homing
   if (running && !homing) {
     stepper.runSpeed();
+
   }
 }
